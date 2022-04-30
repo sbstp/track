@@ -1,6 +1,8 @@
 use std::{
-    ffi::OsString,
+    borrow::Cow,
+    ffi::{OsStr, OsString},
     fs::{self, DirBuilder, File},
+    io,
     os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
     str::FromStr,
@@ -97,12 +99,41 @@ impl PathsDB {
     }
 }
 
+trait DirEntryAdapter {
+    fn file_name(&self) -> Cow<OsStr>;
+    fn file_type(&self) -> io::Result<fs::FileType>;
+
+    fn is_git_dir(&self) -> io::Result<bool> {
+        Ok(self.file_name() == OsStr::new(".git") && self.file_type()?.is_dir())
+    }
+}
+
+impl DirEntryAdapter for fs::DirEntry {
+    fn file_name(&self) -> Cow<OsStr> {
+        Cow::Owned(self.file_name())
+    }
+
+    fn file_type(&self) -> io::Result<fs::FileType> {
+        self.file_type()
+    }
+}
+
+impl DirEntryAdapter for walkdir::DirEntry {
+    fn file_name(&self) -> Cow<OsStr> {
+        Cow::Borrowed(self.file_name())
+    }
+
+    fn file_type(&self) -> io::Result<fs::FileType> {
+        Ok(self.file_type())
+    }
+}
+
 fn find_matches(paths: &[PathBuf]) -> anyhow::Result<Vec<PathBuf>> {
     let mut matches = Vec::new();
     for path in paths {
         let walker = WalkDir::new(path)
             .into_iter()
-            .filter_entry(|d| !d.file_type().is_dir() || d.file_name() != ".git");
+            .filter_entry(|d| !d.is_git_dir().expect("could not if detect .git directory"));
         for entry in walker {
             let entry = entry?;
             if entry.file_type().is_file() {
@@ -117,7 +148,7 @@ fn clean_dir(root: &Path) -> anyhow::Result<()> {
     let root_children = root.read_dir()?;
     for child in root_children {
         let child = child?;
-        if child.file_name() != ".git" || !child.file_type()?.is_dir() {
+        if !child.is_git_dir()? {
             fs::remove_dir_all(child.path())?;
         }
     }

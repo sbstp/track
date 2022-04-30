@@ -9,7 +9,9 @@ version = "0.1.0"
 anyhow = "1"
 clap = {version = "3", features = ["derive"]}
 dirs = "4"
+flate2 = "1"
 rusqlite = "0.27"
+tar = "0.4"
 walkdir = "2"
 
 [profile.release]

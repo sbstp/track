@@ -1,12 +1,12 @@
 use std::{
     ffi::OsString,
-    fs::{self, DirBuilder},
+    fs::{self, DirBuilder, File},
     os::unix::ffi::{OsStrExt, OsStringExt},
     path::{Path, PathBuf},
     str::FromStr,
 };
 
-use anyhow::{anyhow, bail};
+use anyhow::{anyhow, bail, Context};
 use clap::*;
 use walkdir::WalkDir;
 
@@ -136,6 +136,20 @@ fn export_dir(root: PathBuf, matches: &[PathBuf]) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn export_tar(root: PathBuf, matches: &[PathBuf]) -> anyhow::Result<()> {
+    let output = File::create(root)?;
+    let compressor = flate2::write::GzEncoder::new(output, flate2::Compression::default());
+    let mut archiver = tar::Builder::new(compressor);
+
+    for mat in matches {
+        archiver
+            .append_path_with_name(mat, mat.strip_prefix("/")?)
+            .context(format!("could not add path {} to archive", mat.display()))?;
+    }
+
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     let paths_db = PathsDB::open()?;
@@ -165,15 +179,14 @@ fn main() -> anyhow::Result<()> {
             }
         }
         Args::Export { kind, path } => {
-            let root = path.canonicalize()?;
             let paths = paths_db.list()?;
             let matches = find_matches(&paths)?;
             match kind {
                 ExportKind::Dir => {
-                    clean_dir(&root)?;
-                    export_dir(root, &matches)?;
+                    clean_dir(&path)?;
+                    export_dir(path, &matches)?;
                 }
-                ExportKind::Tar => todo!(),
+                ExportKind::Tar => export_tar(path, &matches)?,
                 ExportKind::Zip => todo!(),
             }
         }

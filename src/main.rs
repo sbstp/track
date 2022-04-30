@@ -69,9 +69,14 @@ impl PathsDB {
 
     fn add(&self, path: PathBuf) -> anyhow::Result<()> {
         let path_bytes = path.as_os_str().as_bytes();
-        self.handle
-            .execute("INSERT INTO paths (path) VALUES (?)", [path_bytes])?;
-        Ok(())
+        match self.handle.execute("INSERT INTO paths (path) VALUES (?)", [path_bytes]) {
+            Ok(_) => Ok(()),
+            Err(rusqlite::Error::SqliteFailure(err, _)) if err.code == rusqlite::ErrorCode::ConstraintViolation => {
+                eprintln!("Path already in database!");
+                Ok(())
+            }
+            Err(e) => Err(e.into()),
+        }
     }
 
     fn list(&self) -> anyhow::Result<Vec<PathBuf>> {

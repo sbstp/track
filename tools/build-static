@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+IMAGE="track-rust-builder"
+
+docker build -t "$IMAGE" .
+docker run --rm -it -v "$(pwd):$(pwd)" -w "$(pwd)" "$IMAGE" cargo build --target x86_64-unknown-linux-musl --release

@@ -10,6 +10,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use clap::*;
+use path_absolutize::Absolutize;
 use walkdir::WalkDir;
 
 #[derive(Debug, Parser)]
@@ -69,7 +70,7 @@ impl PathsDB {
         Ok(PathsDB { handle })
     }
 
-    fn add(&self, path: PathBuf) -> anyhow::Result<()> {
+    fn add(&self, path: &Path) -> anyhow::Result<()> {
         let path_bytes = path.as_os_str().as_bytes();
         match self.handle.execute("INSERT INTO paths (path) VALUES (?)", [path_bytes]) {
             Ok(_) => Ok(()),
@@ -92,7 +93,7 @@ impl PathsDB {
         Ok(paths)
     }
 
-    fn rm(&self, path: PathBuf) -> anyhow::Result<()> {
+    fn rm(&self, path: &Path) -> anyhow::Result<()> {
         let path_bytes = path.as_os_str().as_bytes();
         self.handle.execute("DELETE FROM paths WHERE path = ?", [path_bytes])?;
         Ok(())
@@ -135,7 +136,7 @@ fn find_matches(paths: &[PathBuf]) -> anyhow::Result<Vec<PathBuf>> {
             .into_iter()
             .filter_entry(|d| !d.is_git_dir().expect("could not if detect .git directory"));
         for entry in walker {
-            let entry = entry?;
+            let entry = entry.context(format!("error scanning path {}", path.display()))?;
             if entry.file_type().is_file() {
                 matches.push(entry.into_path());
             }
@@ -187,8 +188,8 @@ fn main() -> anyhow::Result<()> {
     match args {
         Args::Add { paths } => {
             for path in paths {
-                let path = path.canonicalize()?;
-                paths_db.add(path)?;
+                let path = path.absolutize()?;
+                paths_db.add(&path)?;
             }
         }
         Args::Ls => {
@@ -198,8 +199,8 @@ fn main() -> anyhow::Result<()> {
         }
         Args::Rm { paths } => {
             for path in paths {
-                let path = path.canonicalize()?;
-                paths_db.rm(path)?;
+                let path = path.absolutize()?;
+                paths_db.rm(&path)?;
             }
         }
         Args::Matched => {

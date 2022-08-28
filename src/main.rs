@@ -25,6 +25,9 @@ enum Args {
     /// Remove a path from tracked paths.
     Rm { paths: Vec<PathBuf> },
 
+    /// Automatically remove deleted or unaccessible paths.
+    Prune,
+
     /// List all files matched by tracked paths.
     Matched,
 
@@ -201,6 +204,15 @@ fn main() -> anyhow::Result<()> {
             for path in paths {
                 let path = path.absolutize()?;
                 paths_db.rm(&path)?;
+            }
+        }
+        Args::Prune => {
+            let paths = paths_db.list()?;
+            for path in paths {
+                if !path.exists() {
+                    println!("Pruned {}", path.display());
+                    paths_db.rm(&path)?;
+                }
             }
         }
         Args::Matched => {
